@@ -1,0 +1,25 @@
+{
+  "keywords": [
+    "kbeauty",
+    "korean beauty",
+    "skincare",
+    "k-beauty products",
+    "korean skincare",
+    "serum",
+    "toner",
+    "moisturizer",
+    "sunscreen",
+    "sheet mask"
+  ],
+  "subreddits": [
+    "kbeauty",
+    "AsianBeauty",
+    "SkincareAddiction",
+    "beauty",
+    "Skincare_Addiction",
+    "koreanbeauty"
+  ],
+  "limit": 50,
+  "time_filter": "week",
+  "notes": "配置说明：keywords 是要搜索的关键词列表，subreddits 是要搜索的子版块列表，limit 是每次搜索返回的最大结果数"
+}
