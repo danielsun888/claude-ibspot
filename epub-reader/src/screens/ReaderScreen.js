@@ -6,13 +6,28 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
-  Dimensions,
+  Modal,
+  TextInput,
+  ScrollView,
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import EpubParser from '../utils/epubParser';
+import { BookmarkManager, AnnotationManager } from '../utils/bookmarkManager';
+import BookmarkList from '../components/BookmarkList';
+import AnnotationList from '../components/AnnotationList';
 
 const READING_PROGRESS_KEY = '@epub_reader_progress_';
+
+// 可用的高亮颜色
+const HIGHLIGHT_COLORS = [
+  { color: '#FFEB3B', name: 'Yellow' },
+  { color: '#4CAF50', name: 'Green' },
+  { color: '#2196F3', name: 'Blue' },
+  { color: '#FF9800', name: 'Orange' },
+  { color: '#E91E63', name: 'Pink' },
+  { color: '#9C27B0', name: 'Purple' },
+];
 
 const ReaderScreen = ({ route, navigation }) => {
   const { book } = route.params;
@@ -21,6 +36,14 @@ const ReaderScreen = ({ route, navigation }) => {
   const [epubParser, setEpubParser] = useState(null);
   const [chapterContent, setChapterContent] = useState('');
   const [bookInfo, setBookInfo] = useState({ title: book.title, author: book.author });
+  const [showBookmarks, setShowBookmarks] = useState(false);
+  const [showAnnotations, setShowAnnotations] = useState(false);
+  const [showToolbar, setShowToolbar] = useState(false);
+  const [showAnnotationModal, setShowAnnotationModal] = useState(false);
+  const [selectedText, setSelectedText] = useState('');
+  const [annotationNote, setAnnotationNote] = useState('');
+  const [selectedColor, setSelectedColor] = useState('#FFEB3B');
+  const [annotations, setAnnotations] = useState([]);
   const webViewRef = useRef(null);
 
   useEffect(() => {
@@ -74,8 +97,15 @@ const ReaderScreen = ({ route, navigation }) => {
     try {
       const chapter = epubParser.getChapter(chapterIndex);
       if (chapter) {
+        // Load annotations for this chapter
+        const chapterAnnotations = await AnnotationManager.getAnnotations(
+          book.id,
+          chapterIndex
+        );
+        setAnnotations(chapterAnnotations);
+
         // Wrap content in HTML with styling
-        const html = generateHtmlContent(chapter.content);
+        const html = generateHtmlContent(chapter.content, chapterAnnotations);
         setChapterContent(html);
 
         // Save progress
@@ -92,9 +122,13 @@ const ReaderScreen = ({ route, navigation }) => {
   };
 
   /**
-   * Generate HTML content with styling
+   * Generate HTML content with styling and text selection support
    */
-  const generateHtmlContent = (content) => {
+  const generateHtmlContent = (content, annotations = []) => {
+    // TODO: Apply annotations/highlights to content
+    // This is a simplified version; actual implementation would need to
+    // parse the HTML and apply highlights based on offsets
+
     return `
       <!DOCTYPE html>
       <html>
@@ -139,7 +173,28 @@ const ReaderScreen = ({ route, navigation }) => {
             max-width: 800px;
             margin: 0 auto;
           }
+          .highlight {
+            background-color: #FFEB3B;
+            padding: 2px 0;
+          }
+          ::selection {
+            background-color: #B3D4FC;
+          }
         </style>
+        <script>
+          // Handle text selection
+          document.addEventListener('selectionchange', function() {
+            const selection = window.getSelection();
+            const selectedText = selection.toString().trim();
+
+            if (selectedText.length > 0) {
+              window.ReactNativeWebView.postMessage(JSON.stringify({
+                type: 'textSelected',
+                text: selectedText
+              }));
+            }
+          });
+        </script>
       </head>
       <body>
         <div class="chapter-content">
@@ -148,6 +203,69 @@ const ReaderScreen = ({ route, navigation }) => {
       </body>
       </html>
     `;
+  };
+
+  /**
+   * Handle messages from WebView
+   */
+  const handleWebViewMessage = (event) => {
+    try {
+      const message = JSON.parse(event.nativeEvent.data);
+
+      if (message.type === 'textSelected') {
+        setSelectedText(message.text);
+        setShowAnnotationModal(true);
+      }
+    } catch (error) {
+      console.error('Error handling WebView message:', error);
+    }
+  };
+
+  /**
+   * Add bookmark
+   */
+  const handleAddBookmark = async () => {
+    try {
+      const chapter = epubParser?.getChapter(currentChapter);
+      await BookmarkManager.addBookmark(book.id, {
+        chapterIndex: currentChapter,
+        chapterTitle: chapter?.path || `Chapter ${currentChapter + 1}`,
+      });
+      Alert.alert('Success', 'Bookmark added!');
+    } catch (error) {
+      Alert.alert('Error', 'Failed to add bookmark');
+    }
+  };
+
+  /**
+   * Save annotation
+   */
+  const handleSaveAnnotation = async () => {
+    if (!selectedText) return;
+
+    try {
+      await AnnotationManager.addAnnotation(book.id, {
+        chapterIndex: currentChapter,
+        selectedText: selectedText,
+        note: annotationNote,
+        color: selectedColor,
+        startOffset: 0, // Simplified - would need actual offset calculation
+        endOffset: selectedText.length,
+      });
+
+      // Reload chapter to show new annotation
+      loadChapter(currentChapter);
+
+      // Reset and close modal
+      setShowAnnotationModal(false);
+      setSelectedText('');
+      setAnnotationNote('');
+      setSelectedColor('#FFEB3B');
+
+      Alert.alert('Success', 'Annotation saved!');
+    } catch (error) {
+      Alert.alert('Error', 'Failed to save annotation');
+    }
   };
 
   /**
@@ -175,6 +293,22 @@ const ReaderScreen = ({ route, navigation }) => {
   };
 
   /**
+   * Handle bookmark selection
+   */
+  const handleBookmarkSelect = (bookmark) => {
+    setCurrentChapter(bookmark.chapterIndex);
+    setShowBookmarks(false);
+  };
+
+  /**
+   * Handle annotation selection
+   */
+  const handleAnnotationSelect = (annotation) => {
+    setCurrentChapter(annotation.chapterIndex);
+    setShowAnnotations(false);
+  };
+
+  /**
    * Handle WebView navigation
    */
   const handleWebViewNavigationStateChange = (navState) => {
@@ -199,7 +333,46 @@ const ReaderScreen = ({ route, navigation }) => {
             Chapter {currentChapter + 1} of {epubParser?.getChapterCount() || 0}
           </Text>
         </View>
+        <TouchableOpacity
+          onPress={() => setShowToolbar(!showToolbar)}
+          style={styles.menuButton}
+        >
+          <Text style={styles.menuIcon}>⋮</Text>
+        </TouchableOpacity>
       </View>
+
+      {/* Toolbar */}
+      {showToolbar && (
+        <View style={styles.toolbar}>
+          <TouchableOpacity
+            style={styles.toolButton}
+            onPress={handleAddBookmark}
+          >
+            <Text style={styles.toolButtonIcon}>🔖</Text>
+            <Text style={styles.toolButtonText}>Add Bookmark</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.toolButton}
+            onPress={() => {
+              setShowBookmarks(true);
+              setShowToolbar(false);
+            }}
+          >
+            <Text style={styles.toolButtonIcon}>📚</Text>
+            <Text style={styles.toolButtonText}>Bookmarks</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.toolButton}
+            onPress={() => {
+              setShowAnnotations(true);
+              setShowToolbar(false);
+            }}
+          >
+            <Text style={styles.toolButtonIcon}>✨</Text>
+            <Text style={styles.toolButtonText}>Annotations</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* WebView Content */}
       <View style={styles.content}>
@@ -215,6 +388,7 @@ const ReaderScreen = ({ route, navigation }) => {
             source={{ html: chapterContent }}
             style={styles.webview}
             onNavigationStateChange={handleWebViewNavigationStateChange}
+            onMessage={handleWebViewMessage}
             onLoadEnd={() => setLoading(false)}
             showsVerticalScrollIndicator={true}
             bounces={true}
@@ -255,6 +429,96 @@ const ReaderScreen = ({ route, navigation }) => {
           <Text style={styles.navButtonText}>Next →</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Bookmark List Modal */}
+      <BookmarkList
+        visible={showBookmarks}
+        onClose={() => setShowBookmarks(false)}
+        bookId={book.id}
+        onBookmarkSelect={handleBookmarkSelect}
+      />
+
+      {/* Annotation List Modal */}
+      <AnnotationList
+        visible={showAnnotations}
+        onClose={() => setShowAnnotations(false)}
+        bookId={book.id}
+        onAnnotationSelect={handleAnnotationSelect}
+      />
+
+      {/* Create Annotation Modal */}
+      <Modal
+        visible={showAnnotationModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowAnnotationModal(false)}
+      >
+        <View style={styles.annotationModalOverlay}>
+          <View style={styles.annotationModal}>
+            <Text style={styles.annotationModalTitle}>Create Annotation</Text>
+
+            {/* Selected Text */}
+            <View style={styles.selectedTextContainer}>
+              <Text style={styles.selectedTextLabel}>Selected Text:</Text>
+              <ScrollView style={styles.selectedTextScroll}>
+                <Text style={styles.selectedTextContent}>"{selectedText}"</Text>
+              </ScrollView>
+            </View>
+
+            {/* Color Picker */}
+            <Text style={styles.colorPickerLabel}>Highlight Color:</Text>
+            <View style={styles.colorPicker}>
+              {HIGHLIGHT_COLORS.map((item) => (
+                <TouchableOpacity
+                  key={item.color}
+                  style={[
+                    styles.colorOption,
+                    { backgroundColor: item.color },
+                    selectedColor === item.color && styles.selectedColorOption,
+                  ]}
+                  onPress={() => setSelectedColor(item.color)}
+                >
+                  {selectedColor === item.color && (
+                    <Text style={styles.checkMark}>✓</Text>
+                  )}
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* Note Input */}
+            <Text style={styles.noteLabel}>Add Note (Optional):</Text>
+            <TextInput
+              style={styles.noteInput}
+              value={annotationNote}
+              onChangeText={setAnnotationNote}
+              placeholder="Type your note here..."
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+            />
+
+            {/* Buttons */}
+            <View style={styles.annotationModalButtons}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.cancelButton]}
+                onPress={() => {
+                  setShowAnnotationModal(false);
+                  setSelectedText('');
+                  setAnnotationNote('');
+                }}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.saveButton]}
+                onPress={handleSaveAnnotation}
+              >
+                <Text style={styles.saveButtonText}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -291,6 +555,34 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     marginTop: 2,
+  },
+  menuButton: {
+    padding: 8,
+  },
+  menuIcon: {
+    fontSize: 24,
+    color: '#007AFF',
+    fontWeight: 'bold',
+  },
+  toolbar: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+  },
+  toolButton: {
+    alignItems: 'center',
+    marginRight: 20,
+  },
+  toolButtonIcon: {
+    fontSize: 24,
+    marginBottom: 4,
+  },
+  toolButtonText: {
+    fontSize: 12,
+    color: '#666',
   },
   content: {
     flex: 1,
@@ -345,6 +637,118 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     fontWeight: '500',
+  },
+  annotationModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  annotationModal: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    maxHeight: '80%',
+  },
+  annotationModalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 16,
+  },
+  selectedTextContainer: {
+    marginBottom: 16,
+  },
+  selectedTextLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#666',
+    marginBottom: 8,
+  },
+  selectedTextScroll: {
+    maxHeight: 100,
+    backgroundColor: '#f5f5f5',
+    borderRadius: 8,
+    padding: 12,
+  },
+  selectedTextContent: {
+    fontSize: 14,
+    color: '#333',
+    fontStyle: 'italic',
+  },
+  colorPickerLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#666',
+    marginBottom: 8,
+  },
+  colorPicker: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginBottom: 16,
+  },
+  colorOption: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    marginRight: 12,
+    marginBottom: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  selectedColorOption: {
+    borderWidth: 3,
+    borderColor: '#333',
+  },
+  checkMark: {
+    color: '#fff',
+    fontSize: 24,
+    fontWeight: 'bold',
+    textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  noteLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#666',
+    marginBottom: 8,
+  },
+  noteInput: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 14,
+    minHeight: 80,
+    marginBottom: 16,
+  },
+  annotationModalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginHorizontal: 4,
+  },
+  cancelButton: {
+    backgroundColor: '#f0f0f0',
+  },
+  saveButton: {
+    backgroundColor: '#007AFF',
+  },
+  cancelButtonText: {
+    color: '#666',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  saveButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
 
