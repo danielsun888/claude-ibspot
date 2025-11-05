@@ -8,8 +8,8 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import DocumentPicker from 'react-native-document-picker';
-import RNFS from 'react-native-fs';
+import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const BOOKS_STORAGE_KEY = '@epub_reader_books';
@@ -53,11 +53,17 @@ const LibraryScreen = ({ navigation }) => {
   const importBook = async () => {
     try {
       setLoading(true);
-      const result = await DocumentPicker.pick({
-        type: [DocumentPicker.types.allFiles],
+      const result = await DocumentPicker.getDocumentAsync({
+        type: 'application/*',
+        copyToCacheDirectory: true,
       });
 
-      const file = result[0];
+      if (result.canceled) {
+        setLoading(false);
+        return;
+      }
+
+      const file = result.assets[0];
 
       // Check if it's an EPUB file
       if (!file.name.endsWith('.epub')) {
@@ -67,8 +73,12 @@ const LibraryScreen = ({ navigation }) => {
       }
 
       // Copy file to app's document directory
-      const destPath = `${RNFS.DocumentDirectoryPath}/${file.name}`;
-      await RNFS.copyFile(file.uri, destPath);
+      const fileName = file.name;
+      const destPath = `${FileSystem.documentDirectory}${fileName}`;
+      await FileSystem.copyAsync({
+        from: file.uri,
+        to: destPath,
+      });
 
       // Create book object
       const newBook = {
@@ -86,12 +96,8 @@ const LibraryScreen = ({ navigation }) => {
 
       Alert.alert('Success', 'Book imported successfully!');
     } catch (error) {
-      if (DocumentPicker.isCancel(error)) {
-        console.log('User cancelled file picker');
-      } else {
-        console.error('Error importing book:', error);
-        Alert.alert('Error', 'Failed to import book');
-      }
+      console.error('Error importing book:', error);
+      Alert.alert('Error', 'Failed to import book: ' + error.message);
     } finally {
       setLoading(false);
     }
@@ -121,7 +127,7 @@ const LibraryScreen = ({ navigation }) => {
             if (book) {
               // Delete file
               try {
-                await RNFS.unlink(book.filePath);
+                await FileSystem.deleteAsync(book.filePath, { idempotent: true });
               } catch (error) {
                 console.error('Error deleting file:', error);
               }

@@ -1,5 +1,5 @@
 import JSZip from 'jszip';
-import RNFS from 'react-native-fs';
+import * as FileSystem from 'expo-file-system';
 
 /**
  * Parse EPUB file and extract content
@@ -19,7 +19,9 @@ export class EpubParser {
   async load() {
     try {
       // Read the file as base64
-      const fileContent = await RNFS.readFile(this.filePath, 'base64');
+      const fileContent = await FileSystem.readAsStringAsync(this.filePath, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
 
       // Load the zip file
       this.zip = await JSZip.loadAsync(fileContent, { base64: true });

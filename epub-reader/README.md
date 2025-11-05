@@ -1,6 +1,6 @@
-# EPUB Reader - React Native
+# EPUB Reader - React Native (Expo)
 
-一个基于 React Native 和 WebView 的 EPUB 电子书阅读器应用。
+一个基于 React Native、Expo 和 WebView 的 EPUB 电子书阅读器应用。
 
 ## 功能特性
 
@@ -16,10 +16,11 @@
 
 ## 技术栈
 
-- **React Native** 0.73.0 - 跨平台移动应用框架
+- **Expo SDK 50** - React Native 开发框架
+- **React Native** 0.73.2 - 跨平台移动应用框架
 - **react-native-webview** - 渲染 EPUB 内容
-- **react-native-document-picker** - 文件选择功能
-- **react-native-fs** - 文件系统操作
+- **expo-document-picker** - 文件选择功能
+- **expo-file-system** - 文件系统操作
 - **jszip** - EPUB 文件解压和解析
 - **@react-navigation** - 应用内导航
 - **@react-native-async-storage/async-storage** - 本地数据存储
@@ -51,32 +52,36 @@ epub-reader/
 ### 前置要求
 
 - Node.js >= 18
-- React Native 开发环境（参考 [官方文档](https://reactnative.dev/docs/environment-setup)）
-- iOS: Xcode 和 CocoaPods
-- Android: Android Studio 和 Android SDK
+- Expo CLI（参考 [Expo 官方文档](https://docs.expo.dev/get-started/installation/)）
+- 移动设备或模拟器：
+  - iOS: 安装 Expo Go app（App Store）或 Xcode 模拟器
+  - Android: 安装 Expo Go app（Google Play）或 Android 模拟器
 
 ### 安装依赖
 
 ```bash
 cd epub-reader
 npm install
-
-# iOS 需要安装 pods
-cd ios && pod install && cd ..
 ```
 
 ### 运行应用
 
 ```bash
-# 启动 Metro bundler
+# 启动 Expo 开发服务器
 npm start
 
-# 运行 iOS
-npm run ios
-
-# 运行 Android
-npm run android
+# 或直接启动到特定平台
+npm run android  # 启动 Android
+npm run ios      # 启动 iOS
+npm run web      # 启动 Web 版本（实验性）
 ```
+
+### 使用 Expo Go 运行
+
+1. 在移动设备上安装 Expo Go app
+2. 运行 `npm start`
+3. 使用 Expo Go 扫描终端显示的 QR 码
+4. 应用将在你的设备上启动
 
 ## 使用说明
 
@@ -208,20 +213,38 @@ npm run android
 确保：
 1. 文件格式确实是 `.epub`
 2. 文件未损坏
-3. 应用有文件访问权限
+3. 应用有文件访问权限（Expo 会自动请求必要权限）
 
-### Q: Android 上文件选择器无法打开？
+### Q: 如何在真机上测试？
 
-在 `android/app/src/main/AndroidManifest.xml` 中添加存储权限：
+1. 安装 Expo Go app（iOS 或 Android）
+2. 确保手机和电脑在同一 WiFi 网络
+3. 运行 `npm start` 并扫描 QR 码
 
-```xml
-<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
-<uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+### Q: 如何构建独立的 APK/IPA？
+
+使用 EAS Build（Expo Application Services）：
+
+```bash
+# 安装 EAS CLI
+npm install -g eas-cli
+
+# 配置项目
+eas build:configure
+
+# 构建 Android APK
+eas build -p android --profile preview
+
+# 构建 iOS
+eas build -p ios --profile preview
 ```
 
-### Q: iOS 上无法读取文件？
+详见 [EAS Build 文档](https://docs.expo.dev/build/introduction/)
 
-确保 `Info.plist` 中包含必要的权限说明。
+### Q: Expo Go 和独立应用的区别？
+
+- **Expo Go**: 用于开发和快速测试，包含所有 Expo SDK
+- **独立应用**: 生产环境使用，只包含项目所需的模块，体积更小
 
 ## 许可证
 
