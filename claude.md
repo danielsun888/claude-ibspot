@@ -1,1 +1,0 @@
-这个html做成 mobile 及pad 友好型
