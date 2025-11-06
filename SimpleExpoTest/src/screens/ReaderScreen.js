@@ -9,6 +9,7 @@ import {
   Modal,
   TextInput,
   ScrollView,
+  FlatList,
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -40,6 +41,7 @@ const ReaderScreen = ({ route, navigation }) => {
   const [showAnnotations, setShowAnnotations] = useState(false);
   const [showToolbar, setShowToolbar] = useState(false);
   const [showAnnotationModal, setShowAnnotationModal] = useState(false);
+  const [showTOC, setShowTOC] = useState(false);
   const [selectedText, setSelectedText] = useState('');
   const [annotationNote, setAnnotationNote] = useState('');
   const [selectedColor, setSelectedColor] = useState('#FFEB3B');
@@ -92,11 +94,19 @@ const ReaderScreen = ({ route, navigation }) => {
    * Load specific chapter
    */
   const loadChapter = async (chapterIndex) => {
-    if (!epubParser) return;
+    if (!epubParser) {
+      console.log('epubParser is not ready');
+      return;
+    }
 
     try {
+      console.log('Loading chapter:', chapterIndex);
       const chapter = epubParser.getChapter(chapterIndex);
+      console.log('Chapter loaded:', chapter ? 'success' : 'null');
+
       if (chapter) {
+        console.log('Chapter content length:', chapter.content?.length || 0);
+
         // Load annotations for this chapter
         const chapterAnnotations = await AnnotationManager.getAnnotations(
           book.id,
@@ -106,6 +116,7 @@ const ReaderScreen = ({ route, navigation }) => {
 
         // Wrap content in HTML with styling
         const html = generateHtmlContent(chapter.content, chapterAnnotations);
+        console.log('Generated HTML length:', html?.length || 0);
         setChapterContent(html);
 
         // Save progress
@@ -113,10 +124,14 @@ const ReaderScreen = ({ route, navigation }) => {
           READING_PROGRESS_KEY + book.id,
           chapterIndex.toString()
         );
+      } else {
+        console.error('Chapter is null for index:', chapterIndex);
+        Alert.alert('错误', '无法加载章节内容');
       }
       setLoading(false);
     } catch (error) {
       console.error('Error loading chapter:', error);
+      Alert.alert('错误', `加载章节失败: ${error.message}`);
       setLoading(false);
     }
   };
@@ -346,6 +361,16 @@ const ReaderScreen = ({ route, navigation }) => {
         <View style={styles.toolbar}>
           <TouchableOpacity
             style={styles.toolButton}
+            onPress={() => {
+              setShowTOC(true);
+              setShowToolbar(false);
+            }}
+          >
+            <Text style={styles.toolButtonIcon}>📑</Text>
+            <Text style={styles.toolButtonText}>Table of Contents</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.toolButton}
             onPress={handleAddBookmark}
           >
             <Text style={styles.toolButtonIcon}>🔖</Text>
@@ -445,6 +470,59 @@ const ReaderScreen = ({ route, navigation }) => {
         bookId={book.id}
         onAnnotationSelect={handleAnnotationSelect}
       />
+
+      {/* Table of Contents Modal */}
+      <Modal
+        visible={showTOC}
+        animationType="slide"
+        transparent={false}
+        onRequestClose={() => setShowTOC(false)}
+      >
+        <View style={styles.tocContainer}>
+          <View style={styles.tocHeader}>
+            <Text style={styles.tocHeaderTitle}>
+              Table of Contents ({epubParser?.getChapterCount() || 0})
+            </Text>
+            <TouchableOpacity onPress={() => setShowTOC(false)}>
+              <Text style={styles.tocCloseButton}>✕</Text>
+            </TouchableOpacity>
+          </View>
+          <FlatList
+            data={epubParser?.getAllChapters() || []}
+            renderItem={({ item, index }) => (
+              <TouchableOpacity
+                style={[
+                  styles.tocItem,
+                  index === currentChapter && styles.tocItemActive,
+                ]}
+                onPress={() => {
+                  setCurrentChapter(index);
+                  setShowTOC(false);
+                  setLoading(true);
+                }}
+              >
+                <Text style={styles.tocItemNumber}>{index + 1}</Text>
+                <View style={styles.tocItemContent}>
+                  <Text
+                    style={[
+                      styles.tocItemTitle,
+                      index === currentChapter && styles.tocItemTitleActive,
+                    ]}
+                    numberOfLines={2}
+                  >
+                    {item.path?.split('/').pop()?.replace('.xhtml', '').replace('.html', '') || `Chapter ${index + 1}`}
+                  </Text>
+                  {index === currentChapter && (
+                    <Text style={styles.tocItemBadge}>正在阅读</Text>
+                  )}
+                </View>
+              </TouchableOpacity>
+            )}
+            keyExtractor={(item, index) => `chapter-${index}`}
+            contentContainerStyle={styles.tocListContainer}
+          />
+        </View>
+      </Modal>
 
       {/* Create Annotation Modal */}
       <Modal
@@ -748,6 +826,84 @@ const styles = StyleSheet.create({
   saveButtonText: {
     color: '#fff',
     fontSize: 16,
+    fontWeight: '600',
+  },
+  // Table of Contents styles
+  tocContainer: {
+    flex: 1,
+    backgroundColor: '#f5f5f5',
+  },
+  tocHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    paddingTop: 48,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  tocHeaderTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  tocCloseButton: {
+    fontSize: 28,
+    color: '#666',
+    fontWeight: '300',
+  },
+  tocListContainer: {
+    padding: 12,
+  },
+  tocItem: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+    alignItems: 'center',
+  },
+  tocItemActive: {
+    backgroundColor: '#E3F2FD',
+    borderLeftWidth: 4,
+    borderLeftColor: '#007AFF',
+  },
+  tocItemNumber: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#999',
+    marginRight: 16,
+    minWidth: 35,
+  },
+  tocItemContent: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  tocItemTitle: {
+    fontSize: 16,
+    color: '#333',
+    flex: 1,
+  },
+  tocItemTitleActive: {
+    color: '#007AFF',
+    fontWeight: '600',
+  },
+  tocItemBadge: {
+    fontSize: 12,
+    color: '#007AFF',
+    backgroundColor: '#fff',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginLeft: 8,
     fontWeight: '600',
   },
 });

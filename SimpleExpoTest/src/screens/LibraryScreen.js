@@ -11,16 +11,124 @@ import {
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Asset } from 'expo-asset';
 
 const BOOKS_STORAGE_KEY = '@epub_reader_books';
+const PRELOADED_BOOKS_KEY = '@epub_reader_preloaded_imported';
+
+// 预置书籍列表
+const PRELOADED_BOOKS = [
+  {
+    fileName: 'bible.epub',
+    title: 'Bible',
+    author: 'Various Authors',
+    asset: require('../data/bible.epub'),
+  },
+];
 
 const LibraryScreen = ({ navigation }) => {
   const [books, setBooks] = useState([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    loadBooks();
+    initializeLibrary();
   }, []);
+
+  /**
+   * Initialize library with preloaded books
+   */
+  const initializeLibrary = async () => {
+    try {
+      // First load existing books
+      await loadBooks();
+
+      // Check if preloaded books have been imported
+      const preloadedImported = await AsyncStorage.getItem(PRELOADED_BOOKS_KEY);
+
+      if (!preloadedImported) {
+        // Import preloaded books on first launch
+        await importPreloadedBooks();
+      }
+    } catch (error) {
+      console.error('Error initializing library:', error);
+    }
+  };
+
+  /**
+   * Import preloaded books from assets
+   */
+  const importPreloadedBooks = async () => {
+    try {
+      setLoading(true);
+      const currentBooks = books.length > 0 ? books : await loadBooksData();
+      const newBooks = [];
+
+      for (const preloadedBook of PRELOADED_BOOKS) {
+        try {
+          // Load the asset
+          const asset = Asset.fromModule(preloadedBook.asset);
+          await asset.downloadAsync();
+
+          // Copy to document directory
+          const destPath = `${FileSystem.documentDirectory}${preloadedBook.fileName}`;
+
+          // Check if file already exists
+          const fileInfo = await FileSystem.getInfoAsync(destPath);
+          if (!fileInfo.exists) {
+            await FileSystem.copyAsync({
+              from: asset.localUri,
+              to: destPath,
+            });
+          }
+
+          // Check if book already in library (by fileName)
+          const existingBook = currentBooks.find(
+            (b) => b.filePath === destPath
+          );
+
+          if (!existingBook) {
+            const newBook = {
+              id: Date.now().toString() + Math.random(),
+              title: preloadedBook.title,
+              author: preloadedBook.author,
+              filePath: destPath,
+              addedDate: new Date().toISOString(),
+              isPreloaded: true,
+            };
+            newBooks.push(newBook);
+          }
+        } catch (error) {
+          console.error(`Error importing ${preloadedBook.fileName}:`, error);
+        }
+      }
+
+      if (newBooks.length > 0) {
+        const updatedBooks = [...currentBooks, ...newBooks];
+        setBooks(updatedBooks);
+        await saveBooks(updatedBooks);
+      }
+
+      // Mark preloaded books as imported
+      await AsyncStorage.setItem(PRELOADED_BOOKS_KEY, 'true');
+      setLoading(false);
+    } catch (error) {
+      console.error('Error importing preloaded books:', error);
+      setLoading(false);
+    }
+  };
+
+  /**
+   * Load books data (returns array)
+   */
+  const loadBooksData = async () => {
+    try {
+      const storedBooks = await AsyncStorage.getItem(BOOKS_STORAGE_KEY);
+      return storedBooks ? JSON.parse(storedBooks) : [];
+    } catch (error) {
+      console.error('Error loading books data:', error);
+      return [];
+    }
+  };
 
   /**
    * Load books from AsyncStorage
@@ -142,6 +250,27 @@ const LibraryScreen = ({ navigation }) => {
   };
 
   /**
+   * Reload preloaded books (for development/testing)
+   */
+  const reloadPreloadedBooks = () => {
+    Alert.alert(
+      '重新导入预置书籍',
+      '这将重新导入 data 文件夹中的预置书籍。确定继续？',
+      [
+        { text: '取消', style: 'cancel' },
+        {
+          text: '确定',
+          onPress: async () => {
+            await AsyncStorage.removeItem(PRELOADED_BOOKS_KEY);
+            await importPreloadedBooks();
+            Alert.alert('完成', '预置书籍已重新导入');
+          },
+        },
+      ]
+    );
+  };
+
+  /**
    * Render book item
    */
   const renderBookItem = ({ item }) => (
@@ -166,7 +295,9 @@ const LibraryScreen = ({ navigation }) => {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>My Library</Text>
+        <TouchableOpacity onLongPress={reloadPreloadedBooks}>
+          <Text style={styles.headerTitle}>My Library</Text>
+        </TouchableOpacity>
         <TouchableOpacity
           style={styles.importButton}
           onPress={importBook}
