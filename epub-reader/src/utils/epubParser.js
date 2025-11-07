@@ -15,16 +15,24 @@ export class EpubParser {
 
   /**
    * Load and parse the EPUB file
+   * Optimized to use fetch with ArrayBuffer instead of base64
    */
   async load() {
     try {
-      // Read the file as base64
-      const fileContent = await FileSystem.readAsStringAsync(this.filePath, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-
-      // Load the zip file
-      this.zip = await JSZip.loadAsync(fileContent, { base64: true });
+      // 方法 1: 优先使用 fetch (更高效)
+      // Expo/React Native 的 fetch 支持 file:// 协议
+      try {
+        const response = await fetch(this.filePath);
+        const arrayBuffer = await response.arrayBuffer();
+        this.zip = await JSZip.loadAsync(arrayBuffer);
+      } catch (fetchError) {
+        // 方法 2: 降级到 base64 (兼容性更好)
+        console.log('Fetch failed, falling back to base64:', fetchError.message);
+        const fileContent = await FileSystem.readAsStringAsync(this.filePath, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+        this.zip = await JSZip.loadAsync(fileContent, { base64: true });
+      }
 
       // Parse container.xml to find the content.opf file
       const containerXml = await this.zip.file('META-INF/container.xml').async('string');
