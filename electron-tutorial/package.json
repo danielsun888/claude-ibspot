@@ -1,0 +1,21 @@
+{
+  "name": "electron-tutorial",
+  "version": "1.0.0",
+  "description": "Electron 入门教程 - 学习如何构建桌面应用",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --inspect"
+  },
+  "keywords": [
+    "electron",
+    "tutorial",
+    "desktop",
+    "app"
+  ],
+  "author": "Claude",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^28.0.0"
+  }
+}

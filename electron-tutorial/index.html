@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'">
+    <title>Electron 教程应用</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <!-- 头部 -->
+        <header>
+            <h1>🚀 Electron 教程应用</h1>
+            <p class="subtitle">学习使用 Electron 构建跨平台桌面应用</p>
+        </header>
+
+        <!-- 主要内容区域 -->
+        <main>
+            <!-- 欢迎部分 -->
+            <section class="welcome-section">
+                <h2>欢迎使用 Electron！</h2>
+                <p>这是一个简单的 Electron 应用示例，展示了如何构建桌面应用程序。</p>
+            </section>
+
+            <!-- 功能演示区域 -->
+            <section class="demo-section">
+                <h3>功能演示</h3>
+
+                <!-- 按钮组 -->
+                <div class="button-group">
+                    <button id="btn-version" class="btn btn-primary">获取版本信息</button>
+                    <button id="btn-system" class="btn btn-secondary">获取系统信息</button>
+                    <button id="btn-save" class="btn btn-success">保存数据</button>
+                    <button id="btn-load" class="btn btn-info">加载数据</button>
+                </div>
+
+                <!-- 信息显示区域 -->
+                <div id="info-display" class="info-box">
+                    <p>点击上面的按钮查看不同的功能...</p>
+                </div>
+            </section>
+
+            <!-- 进程通信演示 -->
+            <section class="ipc-section">
+                <h3>主进程与渲染进程通信</h3>
+                <div class="input-group">
+                    <input type="text" id="message-input" placeholder="输入一条消息..." />
+                    <button id="btn-send" class="btn btn-primary">发送消息</button>
+                </div>
+                <div id="message-display" class="message-box">
+                    <p>消息将显示在这里...</p>
+                </div>
+            </section>
+
+            <!-- 教程链接 -->
+            <section class="tutorial-section">
+                <h3>学习资源</h3>
+                <div class="resource-grid">
+                    <div class="resource-card">
+                        <h4>📚 官方文档</h4>
+                        <p>查看 Electron 官方文档了解更多信息</p>
+                        <a href="#" class="external-link" data-url="https://www.electronjs.org/docs">访问文档</a>
+                    </div>
+                    <div class="resource-card">
+                        <h4>💡 API 参考</h4>
+                        <p>完整的 Electron API 参考手册</p>
+                        <a href="#" class="external-link" data-url="https://www.electronjs.org/docs/api">查看 API</a>
+                    </div>
+                    <div class="resource-card">
+                        <h4>🔧 开发工具</h4>
+                        <p>使用开发者工具调试应用</p>
+                        <button id="btn-devtools" class="btn btn-small">打开 DevTools</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 代码示例 -->
+            <section class="code-section">
+                <h3>代码示例</h3>
+                <div class="code-example">
+                    <h4>创建窗口 (main.js):</h4>
+                    <pre><code>const { app, BrowserWindow } = require('electron');
+
+function createWindow() {
+  const win = new BrowserWindow({
+    width: 800,
+    height: 600,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js')
+    }
+  });
+  win.loadFile('index.html');
+}
+
+app.whenReady().then(createWindow);</code></pre>
+                </div>
+            </section>
+        </main>
+
+        <!-- 页脚 -->
+        <footer>
+            <p>应用版本: <span id="app-version">加载中...</span></p>
+            <p>运行平台: <span id="platform-info">加载中...</span></p>
+        </footer>
+    </div>
+
+    <!-- 渲染进程脚本 -->
+    <script src="renderer.js"></script>
+</body>
+</html>
